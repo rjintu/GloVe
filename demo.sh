@@ -2,6 +2,7 @@
 set -e
 
 # Makes programs, downloads sample data, trains a GloVe model, and then evaluates it.
+# Requires a command line argument to specify training file
 # One optional argument can specify the language used for eval script: matlab, octave or [default] python
 
 make
@@ -15,18 +16,19 @@ if [ ! -e text8 ]; then
   rm text8.zip
 fi
 
-CORPUS=text8
-VOCAB_FILE=vocab.txt
-COOCCURRENCE_FILE=cooccurrence.bin
-COOCCURRENCE_SHUF_FILE=cooccurrence.shuf.bin
+CORPUS=$1
+BASE=$(basename "$CORPUS")
+VOCAB_FILE=vocab_${BASE%.*}.txt
+COOCCURRENCE_FILE=cooccurrence_${BASE%.*}.bin
+COOCCURRENCE_SHUF_FILE=cooccurrence_${BASE%.*}.shuf.bin
 BUILDDIR=build
-SAVE_FILE=vectors
+SAVE_FILE=vectors_${BASE%.*}
 VERBOSE=2
 MEMORY=4.0
-VOCAB_MIN_COUNT=5
-VECTOR_SIZE=50
+VOCAB_MIN_COUNT=10
+VECTOR_SIZE=200
 MAX_ITER=15
-WINDOW_SIZE=15
+WINDOW_SIZE=20
 BINARY=2
 NUM_THREADS=8
 X_MAX=10
@@ -46,9 +48,9 @@ $BUILDDIR/shuffle -memory $MEMORY -verbose $VERBOSE < $COOCCURRENCE_FILE > $COOC
 echo "$ $BUILDDIR/glove -save-file $SAVE_FILE -threads $NUM_THREADS -input-file $COOCCURRENCE_SHUF_FILE -x-max $X_MAX -iter $MAX_ITER -vector-size $VECTOR_SIZE -binary $BINARY -vocab-file $VOCAB_FILE -verbose $VERBOSE"
 $BUILDDIR/glove -save-file $SAVE_FILE -threads $NUM_THREADS -input-file $COOCCURRENCE_SHUF_FILE -x-max $X_MAX -iter $MAX_ITER -vector-size $VECTOR_SIZE -binary $BINARY -vocab-file $VOCAB_FILE -verbose $VERBOSE
 if [ "$CORPUS" = 'text8' ]; then
-   if [ "$1" = 'matlab' ]; then
+   if [ "$2" = 'matlab' ]; then
        matlab -nodisplay -nodesktop -nojvm -nosplash < ./eval/matlab/read_and_evaluate.m 1>&2 
-   elif [ "$1" = 'octave' ]; then
+   elif [ "$2" = 'octave' ]; then
        octave < ./eval/octave/read_and_evaluate_octave.m 1>&2
    else
        echo "$ $PYTHON eval/python/evaluate.py"
