@@ -18,11 +18,16 @@
 import argparse
 import numpy as np
 import spacy
+import random
+import seaborn as sns
+import matplotlib.pyplot as plt
+from statistics import NormalDist
 
 def main():
     parser = argparse.ArgumentParser()
     parser.add_argument('--vocab_file', default='vocab.txt', type=str)
     parser.add_argument('--vectors_file', default='vectors.txt', type=str)
+    parser.add_argument('--randomized_trials', nargs=1, metavar=('NUM_TRIALS'))
     args = parser.parse_args()
 
     with open(args.vocab_file, 'r') as f:
@@ -49,11 +54,87 @@ def main():
     d = (np.sum(W ** 2, 1) ** (0.5))
     W_norm = (W.T / d).T
 
+    title = ' '.join(args.vocab_file[6:-4].split('_')[:-1])
+    print(title)
+
     # note: we can use W_norm for all normalized
+    # we first remove the OOV words before randomizing, because for this dataset the OOV words are not relevant
     pleasant, unpleasant = parse_words()
+    pleasant_rev, unpleasant_rev = remove_oov_words(W_norm, vocab, pleasant), remove_oov_words(W_norm, vocab, unpleasant)
     black_names, white_names = parse_names()
-    res, error = calculate_mean_name_association(W, vocab, 'john', pleasant, unpleasant)
-    print(error)
+
+    test_statistics = []
+    if args.randomized_trials:
+        for _ in range(int(args.randomized_trials[0])):
+            curr_pleasant, curr_unpleasant = randomize_categories(pleasant_rev, unpleasant_rev)
+            curr_stat = calculate_test_statistic(
+                W_norm, vocab, white_names, black_names, curr_pleasant, curr_unpleasant)
+            test_statistics.append(curr_stat)
+
+    test_statistic = calculate_test_statistic(W_norm, vocab, white_names, black_names, pleasant_rev, unpleasant_rev)
+    print('Test statistic for the given data', test_statistic)
+
+    all_test_statistics = np.array(test_statistics)
+    plot_data(all_test_statistics, test_statistic, title)
+
+def randomize_categories(pleasant_orig, unpleasant_orig):
+    '''
+    Given the original pleasant and unpleasant lists, scramble them (for randomization trials)  
+    '''
+    all_words = pleasant_orig + unpleasant_orig
+    pleasant_shuffled = []
+    unpleasant_shuffled = []
+
+    for word in all_words:
+        curr = random.randint(0, 1)
+        if curr == 0:
+            pleasant_shuffled.append(word)
+        else:
+            unpleasant_shuffled.append(word)
+
+    return pleasant_shuffled, unpleasant_shuffled
+
+def calculate_test_statistic(W, vocab, white_names, black_names, pleasant, unpleasant):
+    '''
+    Run the test statistic calculation for a set of white and black names, and a set of pleasant and
+    unpleasant words.
+    :param W: the vector embeddings matrix
+    :param vocab: the vocabulary in the GloVe embeddings
+    :param white_names: list of white names
+    :param black_names: list of black names
+    :param pleasant: list of pleasant words
+    :param unpleasant: list of unpleasant words
+    '''
+    sum_white_names = 0
+    sum_black_names = 0
+
+    for name in white_names:
+        curr_mean = calculate_mean_name_association(
+            W, vocab, name, pleasant, unpleasant)
+        sum_white_names += curr_mean
+
+    count_oov_black = 0
+    for name in black_names:
+        curr_mean = calculate_mean_name_association(
+            W, vocab, name, pleasant, unpleasant)
+        if curr_mean == 0:
+            count_oov_black += 1
+        sum_black_names += curr_mean
+    # print(sum_white_names)
+    # print(sum_black_names)
+    return sum_white_names - sum_black_names
+
+def remove_oov_words(W, vocab, check_words):
+    '''
+    Helper function to determine which words are out of vocabulary, and return only them
+    Prints out the number of words that are considered OOV
+    :param W: the vector embeddings matrix
+    :param vocab: the vocabulary in the GloVe embeddings
+    :param check_words: the set of words to check against the GloVe vocabulary
+    '''
+    output_words = [word for word in check_words if get_embedding(W, vocab, word) is not None]
+    return output_words
+    
 
 def calculate_mean_name_association(W, vocab, name, pleasant, unpleasant):
     '''
@@ -66,33 +147,22 @@ def calculate_mean_name_association(W, vocab, name, pleasant, unpleasant):
     '''
     means_pleasant = np.zeros(len(pleasant))
     means_unpleasant = np.zeros(len(unpleasant))
-    error_words = []
 
     split_size = 100
 
     name_embedding = get_embedding(W, vocab, name)
-    # Name not found error. TODO: handle!
     if name_embedding is None:
         return 0
 
     for i in range(len(pleasant)):
         pleasant_embedding = get_embedding(W, vocab, pleasant[i])
-        if pleasant_embedding is None:
-            error_words.append(pleasant[i])
-            continue
         means_pleasant[i] = cosine_similarity(name_embedding, pleasant_embedding)
 
     for i in range(len(unpleasant)):
         unpleasant_embedding = get_embedding(W, vocab, unpleasant[i])
-        if unpleasant_embedding is None:
-            error_words.append(unpleasant[i])
-            continue
         means_unpleasant[i] = cosine_similarity(name_embedding, unpleasant_embedding)
     
-    print(np.mean(means_pleasant) - np.mean(means_unpleasant))
-    print(f'Number of error words: {len(error_words)}')
-    print('*****')
-    return np.mean(means_pleasant) - np.mean(means_unpleasant), error_words
+    return np.mean(means_pleasant) - np.mean(means_unpleasant)
 
 # get the vector embedding for a given word
 def get_embedding(W, vocab, word):
@@ -100,7 +170,6 @@ def get_embedding(W, vocab, word):
     if index is not None:
         return W[index, :]
     return None
-
 
 # cite: https://www.kaggle.com/cdabakoglu/word-vectors-cosine-similarity
 def cosine_similarity(a, b):
@@ -137,20 +206,33 @@ def parse_words():
     return list(set(pleasant)), list(set(unpleasant))
 
 def parse_names():
+    nlp = spacy.load('en_core_web_sm', disable=['parser', 'ner'])
     black = []
     white = []
-    print('got this far!')
-    with open('../f21_iw/black_names.txt', 'r') as black_names:
-        black = black_names.readlines()
-        black = [x[:-1].lower() for x in black] # remove newline character
+    with open('../f21_iw/black_butler.txt', 'r') as black_names:
+        black_orig = black_names.readlines()
+        for name in black_orig:
+            black.append(" ".join([token.lemma_ for token in nlp(name[:-1].lower())]))
     
-    with open('../f21_iw/black_names.txt', 'r') as white_names:
-        white = white_names.readlines()
-        white = [x[:-1].lower() for x in white] # remove newline character
-    
+    with open('../f21_iw/white_butler.txt', 'r') as white_names:
+        white_orig = white_names.readlines()
+        for name in white_orig:
+            white.append(
+                " ".join([token.lemma_ for token in nlp(name[:-1].lower())]))
     return black, white
 
-main()
-        
+def plot_data(randomized_data, actual_value, title):
+    '''
+    Takes an array of values
+    '''
+    mu, std = np.mean(randomized_data), np.std(randomized_data)
+    critical_val = NormalDist(mu=mu, sigma=std).inv_cdf(0.95)
 
+    sns.set_style('whitegrid')
+    sns.kdeplot(randomized_data, bw=0.5).set_title(title)
+    plt.axvline(x=actual_value)
+    plt.axvline(x=critical_val, linestyle='--')
+    plt.save('_'.join(title.split(' ') + '.txt'))
 
+if __name__ == '__main__': 
+    main()
