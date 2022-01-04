@@ -8,11 +8,20 @@
 # Step 4: plot on a curve, show that there is racial bias (this is the first step)
 
 # proving changes across regions
-# Step 1: create 15 randomized corpora
+# Step 1: create 15 randomized corpora...15 choose 2 is 105? Enough data pts for a distribution
 # Step 2: generate the embeddings
-# Step 3: due the same test as above, get a test statistic to work with
-# Step 4: calculate all combinations of differences
-# Step 5: plot the differences we care about on that actual distribution
+# Step 3: do the same test as above, get a test statistic to work with. Note, we need to normalize
+# Step 4: calculate all combinations of differences, this yields a distribution.
+# Step 5: plot the differences we care about on that actual distribution.
+# Step 6: example for time period: differences 4-3, 4-2, 4-1...do we see a pattern? or is it all over?
+
+
+# what are the differences to compare?
+# Need to compare all regions and time periods against each other: 435 comparisons
+# number of long-term charts: 5 regions over time, and then 6 time periods split over region...11 total
+# how many combinatorial baselines do I need? Perhaps 25 choose 2?
+# how to create those sets: just seek to a random line in each, and then take a random amount...goal is to 
+# make the file sizes relatively similar
 
 
 import argparse
@@ -21,6 +30,7 @@ import spacy
 import random
 import seaborn as sns
 import matplotlib.pyplot as plt
+from tqdm import trange
 from statistics import NormalDist
 
 def main():
@@ -62,10 +72,11 @@ def main():
     pleasant, unpleasant = parse_words()
     pleasant_rev, unpleasant_rev = remove_oov_words(W_norm, vocab, pleasant), remove_oov_words(W_norm, vocab, unpleasant)
     black_names, white_names = parse_names()
+    # black_names, white_names = remove_oov_words(W_norm, vocab, black_names), remove_oov_words(W_norm, vocab, white_names)
 
     test_statistics = []
     if args.randomized_trials:
-        for _ in range(int(args.randomized_trials[0])):
+        for _ in trange(int(args.randomized_trials[0])):
             curr_pleasant, curr_unpleasant = randomize_categories(pleasant_rev, unpleasant_rev)
             curr_stat = calculate_test_statistic(
                 W_norm, vocab, white_names, black_names, curr_pleasant, curr_unpleasant)
@@ -113,15 +124,10 @@ def calculate_test_statistic(W, vocab, white_names, black_names, pleasant, unple
             W, vocab, name, pleasant, unpleasant)
         sum_white_names += curr_mean
 
-    count_oov_black = 0
     for name in black_names:
         curr_mean = calculate_mean_name_association(
             W, vocab, name, pleasant, unpleasant)
-        if curr_mean == 0:
-            count_oov_black += 1
         sum_black_names += curr_mean
-    # print(sum_white_names)
-    # print(sum_black_names)
     return sum_white_names - sum_black_names
 
 def remove_oov_words(W, vocab, check_words):
@@ -148,8 +154,6 @@ def calculate_mean_name_association(W, vocab, name, pleasant, unpleasant):
     means_pleasant = np.zeros(len(pleasant))
     means_unpleasant = np.zeros(len(unpleasant))
 
-    split_size = 100
-
     name_embedding = get_embedding(W, vocab, name)
     if name_embedding is None:
         return 0
@@ -161,7 +165,6 @@ def calculate_mean_name_association(W, vocab, name, pleasant, unpleasant):
     for i in range(len(unpleasant)):
         unpleasant_embedding = get_embedding(W, vocab, unpleasant[i])
         means_unpleasant[i] = cosine_similarity(name_embedding, unpleasant_embedding)
-    
     return np.mean(means_pleasant) - np.mean(means_unpleasant)
 
 # get the vector embedding for a given word
@@ -179,9 +182,9 @@ def cosine_similarity(a, b):
     b_norm = np.sqrt(np.sum(b**2))
 
     denominator = a_norm * b_norm
-    cosine_similarity = numerator / denominator
+    cosine_sim = numerator / denominator
 
-    return cosine_similarity
+    return cosine_sim
 
 def parse_words():
     # if the word has a negative sign, it's unpleasant. Otherwise, pleasant.
@@ -213,7 +216,6 @@ def parse_names():
         black_orig = black_names.readlines()
         for name in black_orig:
             black.append(" ".join([token.lemma_ for token in nlp(name[:-1].lower())]))
-    
     with open('../f21_iw/white_butler.txt', 'r') as white_names:
         white_orig = white_names.readlines()
         for name in white_orig:
@@ -226,13 +228,16 @@ def plot_data(randomized_data, actual_value, title):
     Takes an array of values
     '''
     mu, std = np.mean(randomized_data), np.std(randomized_data)
-    critical_val = NormalDist(mu=mu, sigma=std).inv_cdf(0.95)
+    curr_dist = NormalDist(mu=mu, sigma=std)
+    critical_val = curr_dist.inv_cdf(0.95)
+    print('Mean: ' + str(curr_dist.mean))
+    print('Std Dev: ' + str(curr_dist.stdev))
 
     sns.set_style('whitegrid')
     sns.kdeplot(randomized_data, bw=0.5).set_title(title)
     plt.axvline(x=actual_value)
     plt.axvline(x=critical_val, linestyle='--')
-    plt.save('_'.join(title.split(' ') + '.txt'))
+    plt.savefig('_'.join(title.split(' ')) + '_butler.png')
 
-if __name__ == '__main__': 
+if __name__ == '__main__':
     main()
