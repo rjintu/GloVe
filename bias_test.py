@@ -64,7 +64,8 @@ def main():
     d = (np.sum(W ** 2, 1) ** (0.5))
     W_norm = (W.T / d).T
 
-    title = ' '.join(args.vocab_file[6:-4].split('_')[:-1])
+    title = ' '.join(args.vocab_file[6:-4].split('_')[:-1]) # use this for not randomized
+    # title = args.vocab_file[6:-4] # only use this for randomized
     print(title)
 
     # note: we can use W_norm for all normalized

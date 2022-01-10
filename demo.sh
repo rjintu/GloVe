@@ -6,15 +6,15 @@ set -e
 # One optional argument can specify the language used for eval script: matlab, octave or [default] python
 
 make
-if [ ! -e text8 ]; then
-  if hash wget 2>/dev/null; then
-    wget http://mattmahoney.net/dc/text8.zip
-  else
-    curl -O http://mattmahoney.net/dc/text8.zip
-  fi
-  unzip text8.zip
-  rm text8.zip
-fi
+# if [ ! -e text8 ]; then
+#   if hash wget 2>/dev/null; then
+#     wget http://mattmahoney.net/dc/text8.zip
+#   else
+#     curl -O http://mattmahoney.net/dc/text8.zip
+#   fi
+#   unzip text8.zip
+#   rm text8.zip
+# fi
 
 CORPUS=$1
 BASE=$(basename "$CORPUS")
@@ -45,8 +45,13 @@ echo "$ $BUILDDIR/cooccur -memory $MEMORY -vocab-file $VOCAB_FILE -verbose $VERB
 $BUILDDIR/cooccur -memory $MEMORY -vocab-file $VOCAB_FILE -verbose $VERBOSE -window-size $WINDOW_SIZE < $CORPUS > $COOCCURRENCE_FILE
 echo "$ $BUILDDIR/shuffle -memory $MEMORY -verbose $VERBOSE < $COOCCURRENCE_FILE > $COOCCURRENCE_SHUF_FILE"
 $BUILDDIR/shuffle -memory $MEMORY -verbose $VERBOSE < $COOCCURRENCE_FILE > $COOCCURRENCE_SHUF_FILE
+echo "$ rm $COOCCURRENCE_FILE" # remove the file to save space
+rm $COOCCURRENCE_FILE
 echo "$ $BUILDDIR/glove -save-file $SAVE_FILE -threads $NUM_THREADS -input-file $COOCCURRENCE_SHUF_FILE -x-max $X_MAX -iter $MAX_ITER -vector-size $VECTOR_SIZE -binary $BINARY -vocab-file $VOCAB_FILE -verbose $VERBOSE"
 $BUILDDIR/glove -save-file $SAVE_FILE -threads $NUM_THREADS -input-file $COOCCURRENCE_SHUF_FILE -x-max $X_MAX -iter $MAX_ITER -vector-size $VECTOR_SIZE -binary $BINARY -vocab-file $VOCAB_FILE -verbose $VERBOSE
+echo "$ rm $COOCCURRENCE_SHUF_FILE" # remove the file to save space
+rm $COOCCURRENCE_SHUF_FILE
+
 if [ "$CORPUS" = 'text8' ]; then
    if [ "$2" = 'matlab' ]; then
        matlab -nodisplay -nodesktop -nojvm -nosplash < ./eval/matlab/read_and_evaluate.m 1>&2 

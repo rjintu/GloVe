@@ -25,7 +25,7 @@ def generate_corpus(output_file):
     output_lines = []
 
     # MAXIMUM_SIZE = random.randint(1000, 10000) # TODO: remove this, just for testing
-    MAXIMUM_SIZE = random.randint(1073741824, 2684354560) # number of bytes in 1 GB or 2 GB
+    MAXIMUM_SIZE = random.randint(1073741824, 2147483648) # number of bytes in 1 GB or 2 GB
     bytes_written = 0
 
 
@@ -86,7 +86,7 @@ def main():
         random.seed()
 
     for i in range(int(args.num_files[0])):
-        generate_corpus(f'output_{i}.txt') # guarantee no file overwriting
+        generate_corpus(f'output_{i+15}.txt') # guarantee no file overwriting
 
 if __name__ == '__main__':
     main()
